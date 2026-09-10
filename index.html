@@ -523,30 +523,17 @@
             document.getElementById('uploading-overlay').classList.remove('hidden');
 
             try {
-                // Determine if we need to mock or actually fetch (Mock fallback for preview environments without backend)
-                let data;
-                try {
-                    const response = await fetch(`${API_BASE}/upload`, {
-                        method: 'POST',
-                        body: formData
-                    });
-                    if (!response.ok) throw new Error(await response.text());
-                    data = await response.json();
-                } catch (netErr) {
-                    console.warn("Backend unavailable, simulating success for UI preview:", netErr);
-                    // Mock delay
-                    await new Promise(r => setTimeout(r, 2500));
-                    data = {
-                        success: true,
-                        data: {
-                            id: 'mock-1234',
-                            shareLink: `${window.location.origin}/?share=mock-1234`,
-                            qrCode: 'https://placehold.co/200x200/ffffff/3b82f6?text=QR+Code',
-                            originalSize: formatBytes(selectedFiles.reduce((a,b)=>a+b.size,0)),
-                            compressedSize: formatBytes(selectedFiles.reduce((a,b)=>a+b.size,0) * 0.4) // Simulate 60% compression
-                        }
-                    };
+                const response = await fetch(`${API_BASE}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(errText || 'Upload failed');
                 }
+                
+                const data = await response.json();
 
                 if (data.success) {
                     // Populate success modal
@@ -591,22 +578,11 @@
             const grid = document.getElementById('feed-grid');
             
             try {
-                let shares = [];
-                try {
-                    const response = await fetch(`${API_BASE}/public-shares`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        shares = data.shares || [];
-                    } else {
-                        throw new Error("Backend feed error");
-                    }
-                } catch(e) {
-                     console.warn("Backend unavailable, using mock data for feed preview.");
-                     shares = [
-                        { id: 'mock-1', title: 'Design Assets Q3', description: 'Logos, fonts, and brand guidelines for Q3 marketing.', originalSize: 45000000, compressedSize: 12000000, hasPassword: false, createdAt: Date.now() - 3600000 },
-                        { id: 'mock-2', title: 'Top Secret Source Code', description: 'Encrypted backup. Do not share.', originalSize: 850000000, compressedSize: 200000000, hasPassword: true, createdAt: Date.now() - 86400000 }
-                     ];
-                }
+                const response = await fetch(`${API_BASE}/public-shares`);
+                if (!response.ok) throw new Error("Backend feed error");
+                
+                const data = await response.json();
+                const shares = data.shares || [];
 
                 if (shares.length === 0) {
                     grid.innerHTML = `<div class="col-span-full text-center py-12 text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">No public files shared yet. Be the first!</div>`;
@@ -689,20 +665,10 @@
             const errDiv = document.getElementById('dl-error');
             
             try {
-                let meta;
-                try {
-                    const response = await fetch(`${API_BASE}/metadata/${id}`);
-                    if (!response.ok) throw new Error();
-                    const data = await response.json();
-                    meta = data.metadata;
-                } catch(e) {
-                     // Mock metadata if backend is offline for preview
-                     if(id.startsWith('mock-')) {
-                         meta = { title: "Mock Share File", description: "This is a preview mode file.", originalSize: 104857600, compressedSize: 20971520, totalChunks: 21, hasPassword: id.includes('2') };
-                     } else {
-                         throw new Error("Share not found or expired.");
-                     }
-                }
+                const response = await fetch(`${API_BASE}/metadata/${id}`);
+                if (!response.ok) throw new Error("Share not found or expired.");
+                const data = await response.json();
+                const meta = data.metadata;
 
                 document.getElementById('dl-title').textContent = meta.title;
                 document.getElementById('dl-desc').textContent = meta.description || 'Ready for download';
@@ -743,46 +709,36 @@
             errDiv.classList.add('hidden');
 
             try {
-                
-                if(currentShareId.startsWith('mock-')) {
-                    // Simulate mock download delay
-                    await new Promise(r => setTimeout(r, 1500));
-                    if(document.getElementById('dl-auth').classList.contains('hidden') === false && password === '') {
-                        throw new Error("Incorrect password");
-                    }
-                    showToast('Mock download complete!', 'success');
-                } else {
-                    const response = await fetch(`${API_BASE}/download/${currentShareId}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ password })
-                    });
+                const response = await fetch(`${API_BASE}/download/${currentShareId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
 
-                    if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({}));
-                        throw new Error(errorData.error || 'Failed to download file');
-                    }
-
-                    // Convert stream to downloadable file
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    // Try to extract filename from content-disposition header if possible, else default
-                    let filename = `arixshare_${currentShareId}.zip`;
-                    const disposition = response.headers.get('content-disposition');
-                    if (disposition && disposition.includes('filename=')) {
-                        filename = disposition.split('filename=')[1].replace(/"/g, '');
-                    }
-                    
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    
-                    showToast('Download successful!', 'success');
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || 'Failed to download file');
                 }
+
+                // Convert stream to downloadable file
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                // Try to extract filename from content-disposition header if possible, else default
+                let filename = `arixshare_${currentShareId}.zip`;
+                const disposition = response.headers.get('content-disposition');
+                if (disposition && disposition.includes('filename=')) {
+                    filename = disposition.split('filename=')[1].replace(/"/g, '');
+                }
+                
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                showToast('Download successful!', 'success');
 
             } catch (error) {
                 errDiv.textContent = error.message;
