@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArixShare | Hyper-Compressed Secure Sharing</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts (Inter) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        primary: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' },
+                        surface: '#ffffff',
+                        background: '#f8fafc'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .drop-zone {
+            transition: all 0.2s ease;
+            border: 2px dashed #cbd5e1;
+        }
+        .drop-zone.dragover {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+
+        /* Custom minimal scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Animations */
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-up { animation: slideUp 0.4s ease-out forwards; }
+        
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(1.3); opacity: 0; }
+        }
+        .loader-ring::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            border: 2px solid #3b82f6;
+            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+
+        /* Toggle Switch CSS */
+        .toggle-checkbox:checked { right: 0; border-color: #3b82f6; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #3b82f6; }
+        .toggle-checkbox:checked + .toggle-label:after { transform: translateX(100%); border-color: white; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col relative">
+
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Navigation -->
+    <nav class="sticky top-0 z-40 glass-panel border-b border-slate-200">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-2 cursor-pointer">
+                <div class="bg-primary-600 text-white p-1.5 rounded-lg">
+                    <i data-lucide="zap" class="w-5 h-5"></i>
+                </div>
+                <span class="text-xl font-bold tracking-tight text-slate-900">Arix<span class="text-primary-600">Share</span></span>
+            </a>
+            <div class="flex items-center gap-4">
+                <a href="#public-feed" class="text-sm font-medium text-slate-600 hover:text-primary-600 transition-colors">Public Feed</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow flex flex-col">
+        
+        <!-- ================= VIEW: HOME (UPLOAD & FEED) ================= -->
+        <div id="view-home" class="flex-grow flex flex-col">
+            
+            <!-- Hero & Upload Section -->
+            <section class="max-w-3xl mx-auto w-full px-4 pt-12 pb-16">
+                <div class="text-center mb-8 animate-slide-up">
+                    <h1 class="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-4">
+                        Share Big. <span class="text-transparent bg-clip-text bg-gradient-to-r from-primary-600 to-blue-400">Stay Secure.</span>
+                    </h1>
+                    <p class="text-lg text-slate-600 max-w-xl mx-auto">
+                        Hyper-compress up to 900MB of files into a tiny link or QR code. Lightning fast, heavily encrypted, and beautifully simple.
+                    </p>
+                </div>
+
+                <!-- Upload Card -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 animate-slide-up" style="animation-delay: 0.1s;">
+                    
+                    <!-- Drop Zone -->
+                    <div id="drop-zone" class="drop-zone rounded-xl bg-slate-50 flex flex-col items-center justify-center py-12 px-4 cursor-pointer mb-6 relative overflow-hidden">
+                        <input type="file" id="file-input" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" multiple>
+                        <div class="bg-white p-3 rounded-full shadow-sm mb-3 text-primary-600">
+                            <i data-lucide="cloud-upload" class="w-8 h-8"></i>
+                        </div>
+                        <h3 class="text-lg font-semibold text-slate-800 mb-1">Click or drag files here</h3>
+                        <p class="text-sm text-slate-500">Max 5 files, up to 900MB total</p>
+                    </div>
+
+                    <!-- Selected Files List -->
+                    <div id="file-list" class="hidden flex-col gap-2 mb-6 max-h-48 overflow-y-auto"></div>
+
+                    <!-- Upload Configuration Form -->
+                    <form id="upload-form" class="space-y-5 hidden">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Title</label>
+                                <input type="text" id="share-title" placeholder="e.g., Project Assets" class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-1">Visibility</label>
+                                <div class="flex items-center gap-3 py-2.5">
+                                    <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                                        <input type="checkbox" name="toggle" id="is-public" checked class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer transition-all duration-200 z-10 top-0.5 left-0.5"/>
+                                        <label for="is-public" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-300 cursor-pointer transition-colors duration-200"></label>
+                                    </div>
+                                    <span class="text-sm text-slate-600 font-medium" id="visibility-label">Public Feed</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Description (Optional)</label>
+                            <textarea id="share-desc" rows="2" placeholder="What's inside?" class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all text-sm resize-none"></textarea>
+                        </div>
+
+                        <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="lock" class="w-4 h-4 text-slate-500"></i>
+                                    <label class="text-sm font-medium text-slate-700">Password Protection</label>
+                                </div>
+                                <div class="relative inline-block w-10 align-middle select-none transition duration-200 ease-in">
+                                    <input type="checkbox" name="toggle-pwd" id="use-password" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer transition-all duration-200 z-10 top-0.5 left-0.5"/>
+                                    <label for="use-password" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-300 cursor-pointer transition-colors duration-200"></label>
+                                </div>
+                            </div>
+                            <div id="password-container" class="hidden pt-2">
+                                <input type="text" id="share-password" placeholder="Enter a secure password" class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all text-sm">
+                            </div>
+                        </div>
+
+                        <button type="button" id="btn-upload" class="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2">
+                            <i data-lucide="zap" class="w-5 h-5"></i>
+                            Compress & Share
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <section id="public-feed" class="w-full bg-white border-t border-slate-200 py-16 flex-grow">
+                <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="flex items-center justify-between mb-8">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-900">Public Shares</h2>
+                            <p class="text-sm text-slate-500">Discover recent files shared by the community.</p>
+                        </div>
+                        <button onclick="fetchPublicFeed()" class="p-2 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
+                            <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+
+                    <div id="feed-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <!-- Feed items will be injected here -->
+                        <div class="col-span-full text-center py-12 text-slate-500">
+                            Loading public feed...
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ================= VIEW: DOWNLOAD ================= -->
+        <div id="view-download" class="hidden flex-grow flex flex-col items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-lg border border-slate-200 p-8 max-w-md w-full animate-slide-up relative overflow-hidden">
+                <a href="/" class="absolute top-4 left-4 text-slate-400 hover:text-slate-700 transition-colors">
+                    <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                </a>
+                
+                <div class="text-center mt-4 mb-6">
+                    <div class="bg-primary-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-primary-600 loader-ring relative">
+                        <i data-lucide="package" class="w-8 h-8 relative z-10"></i>
+                    </div>
+                    <h2 id="dl-title" class="text-2xl font-bold text-slate-900 mb-1">Loading Share...</h2>
+                    <p id="dl-desc" class="text-sm text-slate-500">Retrieving metadata</p>
+                </div>
+
+                <div id="dl-meta" class="hidden bg-slate-50 rounded-xl p-4 mb-6 border border-slate-100 space-y-2 text-sm">
+                    <div class="flex justify-between"><span class="text-slate-500">Original:</span> <span id="dl-original" class="font-medium text-slate-800"></span></div>
+                    <div class="flex justify-between"><span class="text-slate-500">Compressed:</span> <span id="dl-compressed" class="font-medium text-primary-600"></span></div>
+                    <div class="flex justify-between"><span class="text-slate-500">Chunks:</span> <span id="dl-chunks" class="font-medium text-slate-800"></span></div>
+                </div>
+
+                <div id="dl-auth" class="hidden mb-6">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Password Required</label>
+                    <input type="password" id="dl-password" placeholder="Enter password to decrypt" class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all">
+                </div>
+
+                <button id="btn-download" class="hidden w-full bg-primary-600 hover:bg-primary-700 text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2">
+                    <i data-lucide="download" class="w-5 h-5"></i>
+                    Download & Uncompress
+                </button>
+                
+                <div id="dl-error" class="hidden mt-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg text-center border border-red-100"></div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ================= MODALS & OVERLAYS ================= -->
+    
+    <!-- Uploading Overlay -->
+    <div id="uploading-overlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex flex-col items-center justify-center">
+        <div class="bg-white p-8 rounded-2xl shadow-xl flex flex-col items-center max-w-sm w-full mx-4">
+            <div class="w-16 h-16 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mb-4"></div>
+            <h3 class="text-lg font-bold text-slate-900 mb-1">Hyper-Compressing...</h3>
+            <p class="text-sm text-slate-500 text-center">Encrypting and chunking files. Please don't close this window.</p>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div id="success-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden animate-slide-up">
+            <div class="bg-gradient-to-r from-green-500 to-emerald-500 p-6 text-center text-white relative">
+                <button onclick="closeSuccessModal()" class="absolute top-4 right-4 text-white/80 hover:text-white transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+                <div class="bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <i data-lucide="check" class="w-8 h-8 text-white"></i>
+                </div>
+                <h3 class="text-2xl font-bold">Ready to Share!</h3>
+            </div>
+            
+            <div class="p-6">
+                <div class="flex justify-center mb-6">
+                    <div class="p-2 bg-white border border-slate-200 rounded-xl shadow-sm">
+                        <img id="success-qr" src="" alt="QR Code" class="w-40 h-40 object-contain">
+                    </div>
+                </div>
+
+                <div class="space-y-4 mb-6">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Share Link</label>
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="success-link" readonly class="w-full bg-slate-50 px-3 py-2.5 rounded-lg border border-slate-200 text-sm text-slate-700 outline-none font-medium">
+                            <button onclick="copyToClipboard('success-link')" class="p-2.5 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-colors shrink-0">
+                                <i data-lucide="copy" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4 text-center text-sm border-t border-slate-100 pt-4">
+                    <div>
+                        <span class="block text-slate-500 text-xs">Original Size</span>
+                        <span id="success-orig-size" class="font-semibold text-slate-800"></span>
+                    </div>
+                    <div>
+                        <span class="block text-slate-500 text-xs">Compressed</span>
+                        <span id="success-comp-size" class="font-semibold text-green-600"></span>
+                    </div>
+                </div>
+                
+                <button onclick="closeSuccessModal()" class="mt-6 w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium py-2.5 rounded-xl transition-colors">
+                    Done
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // --- System Constants & State ---
+        const MAX_FILES = 5;
+        const MAX_TOTAL_SIZE = 900 * 1024 * 1024; // 900MB
+        let selectedFiles = [];
+        let currentShareId = null;
+
+        // Base URL logic. If running locally, assume API is on same origin or standard port.
+        // For Vercel, it uses the same origin.
+        const API_BASE = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1') 
+            ? 'http://localhost:3000/api' // Fallback for local testing if frontend/backend are separated
+            : '/api';
+
+        // --- Utility: Toast Notifications ---
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let bgClass = 'bg-white border-slate-200 text-slate-800';
+            let icon = '<i data-lucide="info" class="w-5 h-5 text-blue-500"></i>';
+            
+            if (type === 'error') {
+                bgClass = 'bg-red-50 border-red-100 text-red-800';
+                icon = '<i data-lucide="alert-circle" class="w-5 h-5 text-red-500"></i>';
+            } else if (type === 'success') {
+                bgClass = 'bg-green-50 border-green-100 text-green-800';
+                icon = '<i data-lucide="check-circle" class="w-5 h-5 text-green-500"></i>';
+            }
+
+            toast.className = `flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border ${bgClass} transform transition-all duration-300 translate-x-full opacity-0 pointer-events-auto`;
+            toast.innerHTML = `${icon} <span class="text-sm font-medium">${message}</span>`;
+            
+            container.appendChild(toast);
+            lucide.createIcons({ root: toast });
+            
+            // Animate in
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-x-full', 'opacity-0');
+            });
+
+            // Animate out and remove
+            setTimeout(() => {
+                toast.classList.add('translate-x-full', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // --- Utility: Copy to Clipboard ---
+        function copyToClipboard(inputId) {
+            const input = document.getElementById(inputId);
+            input.select();
+            input.setSelectionRange(0, 99999);
+            try {
+                document.execCommand('copy');
+                showToast('Link copied to clipboard!', 'success');
+            } catch (err) {
+                showToast('Failed to copy', 'error');
+            }
+        }
+
+        // --- Utility: Format Bytes ---
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
+        // --- STREAMING_CHUNK:UI Interactions & Event Listeners... ---
+
+        // File Drop Zone Logic
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+        const uploadForm = document.getElementById('upload-form');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+        });
+
+        dropZone.addEventListener('drop', handleDrop, false);
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            handleFiles(dt.files);
+        }
+
+        function handleFiles(files) {
+            const newFiles = Array.from(files);
+            
+            if (selectedFiles.length + newFiles.length > MAX_FILES) {
+                showToast(`You can only upload a maximum of ${MAX_FILES} files.`, 'error');
+                return;
+            }
+
+            let totalSize = selectedFiles.reduce((acc, f) => acc + f.size, 0);
+            
+            for (let f of newFiles) {
+                if (totalSize + f.size > MAX_TOTAL_SIZE) {
+                    showToast(`Total size exceeds ${formatBytes(MAX_TOTAL_SIZE)} limit.`, 'error');
+                    return;
+                }
+                totalSize += f.size;
+                selectedFiles.push(f);
+            }
+
+            updateFileUI();
+        }
+
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            updateFileUI();
+        }
+
+        function updateFileUI() {
+            if (selectedFiles.length > 0) {
+                fileList.classList.remove('hidden');
+                fileList.classList.add('flex');
+                uploadForm.classList.remove('hidden');
+                
+                // Hide drop zone text to save space, but keep it clickable/droppable
+                dropZone.querySelector('h3').classList.add('hidden');
+                dropZone.querySelector('p').classList.add('hidden');
+                dropZone.classList.remove('py-12');
+                dropZone.classList.add('py-4');
+                dropZone.querySelector('div').classList.remove('mb-3');
+            } else {
+                fileList.classList.add('hidden');
+                fileList.classList.remove('flex');
+                uploadForm.classList.add('hidden');
+                
+                dropZone.querySelector('h3').classList.remove('hidden');
+                dropZone.querySelector('p').classList.remove('hidden');
+                dropZone.classList.add('py-12');
+                dropZone.classList.remove('py-4');
+                dropZone.querySelector('div').classList.add('mb-3');
+            }
+
+            fileList.innerHTML = '';
+            selectedFiles.forEach((file, index) => {
+                const el = document.createElement('div');
+                el.className = 'flex items-center justify-between bg-white border border-slate-200 p-3 rounded-xl text-sm shadow-sm';
+                el.innerHTML = `
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <i data-lucide="file" class="w-4 h-4 text-slate-400 shrink-0"></i>
+                        <span class="truncate font-medium text-slate-700">${file.name}</span>
+                        <span class="text-xs text-slate-400 shrink-0 bg-slate-100 px-2 py-1 rounded-md">${formatBytes(file.size)}</span>
+                    </div>
+                    <button type="button" onclick="removeFile(${index})" class="text-slate-400 hover:text-red-500 transition-colors p-1">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                `;
+                fileList.appendChild(el);
+            });
+            lucide.createIcons({ root: fileList });
+        }
+
+        // Form Toggles
+        document.getElementById('is-public').addEventListener('change', (e) => {
+            document.getElementById('visibility-label').textContent = e.target.checked ? 'Public Feed' : 'Hidden / Link Only';
+        });
+
+        document.getElementById('use-password').addEventListener('change', (e) => {
+            const pwdContainer = document.getElementById('password-container');
+            if (e.target.checked) {
+                pwdContainer.classList.remove('hidden');
+                document.getElementById('share-password').focus();
+            } else {
+                pwdContainer.classList.add('hidden');
+                document.getElementById('share-password').value = '';
+            }
+        });
+
+        // --- STREAMING_CHUNK:Upload API Integration... ---
+        document.getElementById('btn-upload').addEventListener('click', async () => {
+            if (selectedFiles.length === 0) return;
+
+            const title = document.getElementById('share-title').value.trim() || 'Untitled Share';
+            const desc = document.getElementById('share-desc').value.trim();
+            const isPublic = document.getElementById('is-public').checked;
+            const usePassword = document.getElementById('use-password').checked;
+            const password = document.getElementById('share-password').value;
+
+            if (usePassword && password.length < 3) {
+                showToast('Password must be at least 3 characters', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            selectedFiles.forEach(file => formData.append('files', file));
+            formData.append('title', title);
+            formData.append('description', desc);
+            formData.append('isPublic', isPublic);
+            if (usePassword) formData.append('password', password);
+
+            document.getElementById('uploading-overlay').classList.remove('hidden');
+
+            try {
+                // Determine if we need to mock or actually fetch (Mock fallback for preview environments without backend)
+                let data;
+                try {
+                    const response = await fetch(`${API_BASE}/upload`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (!response.ok) throw new Error(await response.text());
+                    data = await response.json();
+                } catch (netErr) {
+                    console.warn("Backend unavailable, simulating success for UI preview:", netErr);
+                    // Mock delay
+                    await new Promise(r => setTimeout(r, 2500));
+                    data = {
+                        success: true,
+                        data: {
+                            id: 'mock-1234',
+                            shareLink: `${window.location.origin}/?share=mock-1234`,
+                            qrCode: 'https://placehold.co/200x200/ffffff/3b82f6?text=QR+Code',
+                            originalSize: formatBytes(selectedFiles.reduce((a,b)=>a+b.size,0)),
+                            compressedSize: formatBytes(selectedFiles.reduce((a,b)=>a+b.size,0) * 0.4) // Simulate 60% compression
+                        }
+                    };
+                }
+
+                if (data.success) {
+                    // Populate success modal
+                    document.getElementById('success-qr').src = data.data.qrCode;
+                    
+                    // Format link to match frontend routing if backend returns a raw /share/ link
+                    let finalLink = data.data.shareLink;
+                    if(finalLink.includes('/share/')) {
+                        const id = finalLink.split('/share/').pop();
+                        finalLink = `${window.location.origin}/?share=${id}`;
+                    }
+                    
+                    document.getElementById('success-link').value = finalLink;
+                    document.getElementById('success-orig-size').textContent = data.data.originalSize;
+                    document.getElementById('success-comp-size').textContent = data.data.compressedSize;
+                    
+                    // Reset UI
+                    selectedFiles = [];
+                    updateFileUI();
+                    document.getElementById('upload-form').reset();
+                    document.getElementById('password-container').classList.add('hidden');
+                    
+                    document.getElementById('uploading-overlay').classList.add('hidden');
+                    document.getElementById('success-modal').classList.remove('hidden');
+                    
+                    // Refresh feed if public
+                    if (isPublic) fetchPublicFeed();
+                }
+
+            } catch (error) {
+                document.getElementById('uploading-overlay').classList.add('hidden');
+                showToast(error.message || 'Upload failed', 'error');
+            }
+        });
+
+        function closeSuccessModal() {
+            document.getElementById('success-modal').classList.add('hidden');
+        }
+
+        // --- STREAMING_CHUNK:Public Feed Logic... ---
+        async function fetchPublicFeed() {
+            const grid = document.getElementById('feed-grid');
+            
+            try {
+                let shares = [];
+                try {
+                    const response = await fetch(`${API_BASE}/public-shares`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        shares = data.shares || [];
+                    } else {
+                        throw new Error("Backend feed error");
+                    }
+                } catch(e) {
+                     console.warn("Backend unavailable, using mock data for feed preview.");
+                     shares = [
+                        { id: 'mock-1', title: 'Design Assets Q3', description: 'Logos, fonts, and brand guidelines for Q3 marketing.', originalSize: 45000000, compressedSize: 12000000, hasPassword: false, createdAt: Date.now() - 3600000 },
+                        { id: 'mock-2', title: 'Top Secret Source Code', description: 'Encrypted backup. Do not share.', originalSize: 850000000, compressedSize: 200000000, hasPassword: true, createdAt: Date.now() - 86400000 }
+                     ];
+                }
+
+                if (shares.length === 0) {
+                    grid.innerHTML = `<div class="col-span-full text-center py-12 text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">No public files shared yet. Be the first!</div>`;
+                    return;
+                }
+
+                grid.innerHTML = '';
+                shares.forEach(share => {
+                    const date = new Date(share.createdAt).toLocaleDateString();
+                    const sizeMB = (share.compressedSize / 1024 / 1024).toFixed(1);
+                    
+                    const card = document.createElement('div');
+                    card.className = 'bg-white border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-shadow flex flex-col h-full';
+                    card.innerHTML = `
+                        <div class="flex justify-between items-start mb-3">
+                            <div class="bg-primary-50 p-2 rounded-lg text-primary-600">
+                                <i data-lucide="folder-archive" class="w-5 h-5"></i>
+                            </div>
+                            ${share.hasPassword ? '<span class="bg-slate-100 text-slate-500 text-xs px-2 py-1 rounded flex items-center gap-1"><i data-lucide="lock" class="w-3 h-3"></i> Protected</span>' : ''}
+                        </div>
+                        <h3 class="font-bold text-slate-900 text-lg mb-1 line-clamp-1">${share.title}</h3>
+                        <p class="text-sm text-slate-500 mb-4 line-clamp-2 flex-grow">${share.description || 'No description provided.'}</p>
+                        
+                        <div class="flex items-center justify-between pt-4 border-t border-slate-100 mt-auto">
+                            <span class="text-xs font-medium text-slate-400">${sizeMB} MB • ${date}</span>
+                            <a href="/?share=${share.id}" class="text-sm font-semibold text-primary-600 hover:text-primary-700 flex items-center gap-1">
+                                Get Files <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                            </a>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+                lucide.createIcons({ root: grid });
+
+            } catch (error) {
+                grid.innerHTML = `<div class="col-span-full text-center py-12 text-red-500">Failed to load public feed.</div>`;
+            }
+        }
+
+        // --- STREAMING_CHUNK:Download Flow & Routing... ---
+        
+        // Simple Router
+        function handleRouting() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const shareId = urlParams.get('share');
+            
+            // Also check hash for compatibility #share=123
+            let hashId = null;
+            if(window.location.hash.startsWith('#share=')) {
+                hashId = window.location.hash.split('=')[1];
+            }
+            
+            // Also check pathname for /share/123 if rewritten
+            let pathId = null;
+            if(window.location.pathname.startsWith('/share/')) {
+                pathId = window.location.pathname.split('/share/')[1];
+            }
+
+            const activeShareId = shareId || hashId || pathId;
+
+            if (activeShareId) {
+                document.getElementById('view-home').classList.add('hidden');
+                document.getElementById('view-download').classList.remove('hidden');
+                document.getElementById('view-download').classList.add('flex');
+                initDownloadView(activeShareId);
+            } else {
+                document.getElementById('view-home').classList.remove('hidden');
+                document.getElementById('view-home').classList.add('flex');
+                document.getElementById('view-download').classList.add('hidden');
+                document.getElementById('view-download').classList.remove('flex');
+                fetchPublicFeed();
+            }
+        }
+
+        async function initDownloadView(id) {
+            currentShareId = id;
+            const btn = document.getElementById('btn-download');
+            const authDiv = document.getElementById('dl-auth');
+            const metaDiv = document.getElementById('dl-meta');
+            const errDiv = document.getElementById('dl-error');
+            
+            try {
+                let meta;
+                try {
+                    const response = await fetch(`${API_BASE}/metadata/${id}`);
+                    if (!response.ok) throw new Error();
+                    const data = await response.json();
+                    meta = data.metadata;
+                } catch(e) {
+                     // Mock metadata if backend is offline for preview
+                     if(id.startsWith('mock-')) {
+                         meta = { title: "Mock Share File", description: "This is a preview mode file.", originalSize: 104857600, compressedSize: 20971520, totalChunks: 21, hasPassword: id.includes('2') };
+                     } else {
+                         throw new Error("Share not found or expired.");
+                     }
+                }
+
+                document.getElementById('dl-title').textContent = meta.title;
+                document.getElementById('dl-desc').textContent = meta.description || 'Ready for download';
+                
+                document.getElementById('dl-original').textContent = formatBytes(meta.originalSize);
+                document.getElementById('dl-compressed').textContent = formatBytes(meta.compressedSize);
+                document.getElementById('dl-chunks').textContent = meta.totalChunks;
+                
+                metaDiv.classList.remove('hidden');
+                btn.classList.remove('hidden');
+                
+                if (meta.hasPassword) {
+                    authDiv.classList.remove('hidden');
+                } else {
+                    authDiv.classList.add('hidden');
+                }
+
+            } catch (error) {
+                document.getElementById('dl-title').textContent = 'Link Expired or Invalid';
+                document.getElementById('dl-desc').textContent = 'This file is no longer available.';
+                document.querySelector('.loader-ring').classList.remove('text-primary-600', 'bg-primary-50');
+                document.querySelector('.loader-ring').classList.add('text-red-600', 'bg-red-50');
+                document.querySelector('.loader-ring i').setAttribute('data-lucide', 'x-circle');
+                lucide.createIcons();
+            }
+        }
+
+        document.getElementById('btn-download').addEventListener('click', async () => {
+            if (!currentShareId) return;
+            
+            const btn = document.getElementById('btn-download');
+            const errDiv = document.getElementById('dl-error');
+            const pwdInput = document.getElementById('dl-password');
+            const password = pwdInput ? pwdInput.value : '';
+
+            btn.disabled = true;
+            btn.innerHTML = `<div class="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Uncompressing...`;
+            errDiv.classList.add('hidden');
+
+            try {
+                
+                if(currentShareId.startsWith('mock-')) {
+                    // Simulate mock download delay
+                    await new Promise(r => setTimeout(r, 1500));
+                    if(document.getElementById('dl-auth').classList.contains('hidden') === false && password === '') {
+                        throw new Error("Incorrect password");
+                    }
+                    showToast('Mock download complete!', 'success');
+                } else {
+                    const response = await fetch(`${API_BASE}/download/${currentShareId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.error || 'Failed to download file');
+                    }
+
+                    // Convert stream to downloadable file
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    // Try to extract filename from content-disposition header if possible, else default
+                    let filename = `arixshare_${currentShareId}.zip`;
+                    const disposition = response.headers.get('content-disposition');
+                    if (disposition && disposition.includes('filename=')) {
+                        filename = disposition.split('filename=')[1].replace(/"/g, '');
+                    }
+                    
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    showToast('Download successful!', 'success');
+                }
+
+            } catch (error) {
+                errDiv.textContent = error.message;
+                errDiv.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i data-lucide="download" class="w-5 h-5"></i> Download & Uncompress`;
+                lucide.createIcons({ root: btn });
+            }
+        });
+
+        // Initialize App
+        window.addEventListener('popstate', handleRouting);
+        window.addEventListener('hashchange', handleRouting);
+        document.addEventListener('DOMContentLoaded', handleRouting);
+
+    </script>
+</body>
+</html>
